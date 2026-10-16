@@ -13,17 +13,23 @@ import {
   Sliders,
   Square,
   Wind,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { FlightControlState } from '../../types/ysflight';
 
 interface FlightControlsPanelProps {
   controls: FlightControlState;
   onChange: React.Dispatch<React.SetStateAction<FlightControlState>>;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
   controls,
   onChange,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   const stickPadRef = useRef<HTMLDivElement | null>(null);
   const [draggingStick, setDraggingStick] = useState(false);
@@ -101,6 +107,23 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
     ? Math.round(650 + controls.throttle * 2050)
     : 0;
 
+  if (isCollapsed) {
+    return (
+      <aside className="side-panel left-panel collapsed" aria-label="Controles de Voo Recolhidos">
+        <button
+          type="button"
+          className="panel-rail-btn"
+          onClick={onToggleCollapse}
+          title="Expandir Comando de Partes Móveis (CLA)"
+        >
+          <ChevronRight size={16} />
+          <span className="rail-vertical-text">Comandos de Voo</span>
+          <Sliders size={14} className="rail-icon" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="side-panel left-panel" aria-label="Controles das Partes Móveis">
       <div className="panel-header">
@@ -111,17 +134,30 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
             <p>Canais de Animação DNM (CLA / STA)</p>
           </div>
         </div>
-        <button
-          type="button"
-          className={`demo-btn ${controls.autoDemo ? 'active' : ''}`}
-          onClick={() =>
-            onChange((prev) => ({ ...prev, autoDemo: !prev.autoDemo }))
-          }
-          title="Executar cheque automático de todas as superfícies móveis"
-        >
-          {controls.autoDemo ? <Square size={14} /> : <Play size={14} />}
-          <span>{controls.autoDemo ? 'Parar Demo' : 'Auto-Demo'}</span>
-        </button>
+        <div className="panel-header-actions">
+          <button
+            type="button"
+            className={`demo-btn ${controls.autoDemo ? 'active' : ''}`}
+            onClick={() =>
+              onChange((prev) => ({ ...prev, autoDemo: !prev.autoDemo }))
+            }
+            title="Executar cheque automático de todas as superfícies móveis"
+          >
+            {controls.autoDemo ? <Square size={13} /> : <Play size={13} />}
+            <span>{controls.autoDemo ? 'Parar' : 'Demo'}</span>
+          </button>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              className="panel-toggle-btn"
+              onClick={onToggleCollapse}
+              title="Recolher painel de comandos"
+              aria-label="Recolher painel de comandos"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="panel-scroll-body">

@@ -100,15 +100,69 @@ export interface DatPropertyEntry {
   line: number;
 }
 
+export interface ExCameraEntry {
+  name: string;
+  pos: Vec3;
+  att: Att3;
+  mode: 'INSIDE' | 'OUTSIDE';
+  comment?: string;
+}
+
+export interface TurretEntry {
+  index: number;
+  pos?: Vec3;
+  pitchLimits?: { min: number; max: number; neutral: number };
+  hdgLimits?: { min: number; max: number; neutral: number };
+  ammo?: number;
+  intervalSec?: number;
+  nodeName?: string;
+  antiAir?: number;
+  controlledBy?: 'PILOT' | 'GUNNER';
+}
+
+export interface HardpointWeaponEntry {
+  weapon: string;
+  count: number;
+}
+
 export interface AircraftDatData {
+  // 1. Identificação & Classificação
   identify: string;
   category: string;
+  airClass?: 'AIRPLANE' | 'HELICOPTER';
+  strength: number;
+  radarCrossSection: number;
+
+  // 2. Propulsão & Motores
+  propulsionType: 'jet' | 'propeller';
   enginePower: string;
   hasAfterburner: boolean;
+  thrustMilitaryKg?: number;
+  thrustMilitaryRaw?: string;
+  thrustAfterburnerKg?: number;
+  thrustAfterburnerRaw?: string;
+  thrustReverserEfficiency?: number;
+  fuelConsumptionKgSec: number;
+  fuelConsumptionAfterburnerKgSec?: number;
+  propellerPowerHp?: number;
+  propellerPowerRaw?: string;
+  propellerEfficiency?: number;
+  propellerVMinMs?: number;
+  hasThrustVectoring?: boolean;
+  thrustDir0?: Vec3;
+  thrustDir1?: Vec3;
+  postStallPitchDeg?: number;
+  postStallYawDeg?: number;
+  postStallRollDeg?: number;
+
+  // 3. Pesos & Balanceamento
   weightCleanTon: number;
   weightFuelTon: number;
   weightPayloadTon: number;
-  fuelConsumptionKgSec: number;
+  initialFuelPercent: number;
+  initialPayloadTon: number;
+
+  // 4. Aerodinâmica, Estol & Estabilidade
   wingAreaM2: number;
   critSpeed: string;
   maxSpeed: string;
@@ -119,17 +173,25 @@ export interface AircraftDatData {
   maxInputRollDeg: number;
   maneSpeed1: string;
   maneSpeed2: string;
-  refCruisingSpeed: string;
-  refCruisingAlt: string;
-  refLandingSpeed: string;
-  refLandingAoaDeg: number;
-  refRunwayM: number;
-  outsideRadiusM: number;
+  clByFlap: number;
+  cdByFlap: number;
+  cdByGear: number;
+  cdBySpoiler: number;
   hasSpoiler: boolean;
   hasRetractableGear: boolean;
   hasVariableGeometryWing: boolean;
-  strength: number;
-  radarCrossSection: number;
+  clVarGeom: number;
+  cdVarGeom: number;
+  vgwSpeed1?: string;
+  vgwSpeed2?: string;
+  pitchManeuverability: number;
+  pitchStability: number;
+  yawManeuverability: number;
+  yawStability: number;
+  rollManeuverability: number;
+
+  // 5. Pontos Espaciais 3D & Visão
+  outsideRadiusM: number;
   points3D: {
     cockpit?: Vec3;
     leftGear?: Vec3;
@@ -137,10 +199,55 @@ export interface AircraftDatData {
     wheelGear?: Vec3;
     arrester?: Vec3;
     machineGun?: Vec3;
+    machineGun2?: Vec3;
     smokeGen?: Vec3;
+    smokeOilKg?: number;
     vapor0?: Vec3;
     vapor1?: Vec3;
+    flarePos?: Vec3;
   };
+  extraCameras: ExCameraEntry[];
+  turrets: TurretEntry[];
+
+  // 6. Armamento, Aviônica & Gatilhos
+  initGunRounds: number;
+  gunPower: number;
+  gunIntervalSec: number;
+  hasGunSight: boolean;
+  initAam: number;
+  maxAam: number;
+  initAgm: number;
+  maxAgm: number;
+  initBomb: number;
+  maxBomb: number;
+  initBomb250: number;
+  maxBomb250: number;
+  initRockets: number;
+  maxRockets: number;
+  isRocketsVisible: boolean;
+  maxFlares: number;
+  limitByHardpoints: boolean;
+  hardpointWeapons: HardpointWeaponEntry[];
+  triggers: {
+    trigger1?: string;
+    trigger2?: string;
+    trigger3?: string;
+    trigger4?: string;
+  };
+  weaponCycleOrder: string[];
+
+  // 7. Operações de Voo & Referências
+  refCruisingSpeed: string;
+  refCruisingAlt: string;
+  refCruisingThrottle: number;
+  refLandingSpeed: string;
+  refLandingAoaDeg: number;
+  refLandingThrottle: number;
+  refRunwayM: number;
+  autoCalc: boolean;
+  hasInstrumentPanel?: boolean;
+
+  // Linhas e comentários originais
   rawEntries: DatPropertyEntry[];
 }
 

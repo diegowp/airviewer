@@ -9,6 +9,7 @@ import {
   Eye,
   ArrowUp,
   ArrowRight,
+  Sliders,
 } from 'lucide-react';
 import { AircraftCatalogEntry, AircraftDatData, CameraPreset } from '../../types/ysflight';
 
@@ -21,6 +22,7 @@ interface TopBarProps {
   onSelectPreset: (preset: CameraPreset) => void;
   onResetCamera: () => void;
   onLoadCustomFiles: (files: FileList) => void;
+  onOpenDatEditor?: () => void;
   totalPolygons: number;
   totalVertices: number;
   activeNodeCount: number;
@@ -44,6 +46,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onSelectPreset,
   onResetCamera,
   onLoadCustomFiles,
+  onOpenDatEditor,
   totalPolygons,
   totalVertices,
   activeNodeCount,
@@ -95,10 +98,10 @@ export const TopBar: React.FC<TopBarProps> = ({
             </div>
           </div>
           <div className="aircraft-submeta">
-            <span className="meta-pill">YSFlight DNM</span>
+            <span className="meta-pill submeta-engine">YSFlight DNM</span>
             <span className="meta-pill">{activeNodeCount} nós</span>
             <span className="meta-pill">{totalPolygons.toLocaleString('pt-BR')} faces</span>
-            <span className="meta-pill">{totalVertices.toLocaleString('pt-BR')} vértices</span>
+            <span className="meta-pill submeta-verts">{totalVertices.toLocaleString('pt-BR')} vértices</span>
             {dat?.category && <span className="meta-pill category-badge">{dat.category}</span>}
           </div>
         </div>
@@ -106,7 +109,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       <div className="topbar-cameras" role="group" aria-label="Câmeras predefinidas">
         <span className="camera-group-label">
-          <Camera size={13} /> Câmera:
+          <Camera size={13} />
+          <span className="cam-label-text">Câmera:</span>
         </span>
         {CAMERA_PRESETS.map((preset) => (
           <button
@@ -117,7 +121,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             title={`Alternar câmera para ${preset.label}`}
           >
             {preset.icon}
-            <span>{preset.label}</span>
+            <span className="cam-btn-text">{preset.label}</span>
           </button>
         ))}
         <button
@@ -131,6 +135,20 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       <div className="topbar-actions">
+        {onOpenDatEditor && (
+          <button
+            type="button"
+            className="secondary-btn action-edit-dat"
+            onClick={onOpenDatEditor}
+            title="Abrir editor completo de especificações técnicas, física e aerodinâmica (.dat)"
+            disabled={!dat}
+          >
+            <Sliders size={14} />
+            <span className="btn-label-long">Editar Ficha Técnica (.dat)</span>
+            <span className="btn-label-short">Editar .DAT</span>
+          </button>
+        )}
+
         <input
           ref={fileInputRef}
           type="file"
@@ -146,7 +164,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           title="Carregar arquivos .dnm, .srf ou .dat do computador"
         >
           <Upload size={14} />
-          <span>Importar DNM / SRF</span>
+          <span className="btn-label-long">Importar DNM / SRF</span>
+          <span className="btn-label-short">Importar</span>
         </button>
       </div>
     </header>

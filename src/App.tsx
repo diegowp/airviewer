@@ -15,6 +15,7 @@ import { TopBar } from './components/ui/TopBar';
 import { FlightControlsPanel } from './components/ui/FlightControlsPanel';
 import { InspectorPanel } from './components/ui/InspectorPanel';
 import { AircraftViewport, RenderSettings } from './components/viewport/AircraftViewport';
+import { AircraftDatEditor } from './components/editor/AircraftDatEditor';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 
 const INITIAL_CONTROLS: FlightControlState = {
@@ -74,6 +75,14 @@ export const App: React.FC = () => {
 
   const [selectedNodeName, setSelectedNodeName] = useState<string | null>(null);
   const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set());
+  const [isDatEditorOpen, setIsDatEditorOpen] = useState<boolean>(false);
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState<boolean>(false);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState<boolean>(false);
+
+  const handleApplyDat = useCallback((updatedDat: AircraftDatData, updatedText: string) => {
+    setDatData(updatedDat);
+    setRawFiles((prev) => ({ ...prev, dat: updatedText }));
+  }, []);
 
   // Função central para carregar uma aeronave do catálogo com suporte a múltiplos SRFs externos
   const loadCatalogAircraft = useCallback(async (entry: AircraftCatalogEntry) => {
@@ -376,6 +385,11 @@ export const App: React.FC = () => {
     };
   }, [dnmData]);
 
+  const currentCatalogEntry = useMemo(
+    () => AIRCRAFT_CATALOG.find((a) => a.id === selectedAircraftId),
+    [selectedAircraftId]
+  );
+
   return (
     <div className="app-shell">
       <TopBar
@@ -387,13 +401,23 @@ export const App: React.FC = () => {
         onSelectPreset={handleSelectPreset}
         onResetCamera={handleResetCamera}
         onLoadCustomFiles={handleLoadCustomFiles}
+        onOpenDatEditor={() => setIsDatEditorOpen(true)}
         totalPolygons={totalPolygons}
         totalVertices={totalVertices}
         activeNodeCount={activeNodeCount}
       />
 
-      <main className="workspace-grid">
-        <FlightControlsPanel controls={controls} onChange={setControls} />
+      <main
+        className={`workspace-grid ${leftPanelCollapsed ? 'left-collapsed' : ''} ${
+          rightPanelCollapsed ? 'right-collapsed' : ''
+        }`}
+      >
+        <FlightControlsPanel
+          controls={controls}
+          onChange={setControls}
+          isCollapsed={leftPanelCollapsed}
+          onToggleCollapse={() => setLeftPanelCollapsed((c) => !c)}
+        />
 
         <div className="center-stage">
           {loading && (
@@ -438,8 +462,21 @@ export const App: React.FC = () => {
           onIsolateNode={handleIsolateNode}
           selectedNodeName={selectedNodeName}
           onSelectNode={setSelectedNodeName}
+          onOpenDatEditor={() => setIsDatEditorOpen(true)}
+          isCollapsed={rightPanelCollapsed}
+          onToggleCollapse={() => setRightPanelCollapsed((c) => !c)}
         />
       </main>
+
+      <AircraftDatEditor
+        isOpen={isDatEditorOpen}
+        onClose={() => setIsDatEditorOpen(false)}
+        originalDatText={rawFiles.dat}
+        datData={datData}
+        aircraftName={currentCatalogEntry?.name || datData?.identify || 'Aeronave'}
+        datFilename={currentCatalogEntry?.datFile || `${datData?.identify || 'aircraft'}.dat`}
+        onApplyToModel={handleApplyDat}
+      />
     </div>
   );
 };

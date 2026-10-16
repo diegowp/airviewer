@@ -8,7 +8,10 @@ import {
   Layers,
   Search,
   Sparkles,
+  Sliders,
   Wrench,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   AircraftDatData,
@@ -36,6 +39,9 @@ interface InspectorPanelProps {
   onIsolateNode: (nodeName: string) => void;
   selectedNodeName: string | null;
   onSelectNode: (nodeName: string | null) => void;
+  onOpenDatEditor?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
@@ -51,6 +57,9 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   onIsolateNode,
   selectedNodeName,
   onSelectNode,
+  onOpenDatEditor,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -109,6 +118,23 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
     dialogRef.current?.close();
   };
 
+  if (isCollapsed) {
+    return (
+      <aside className="side-panel right-panel collapsed" aria-label="Inspetor 3D Recolhido">
+        <button
+          type="button"
+          className="panel-rail-btn"
+          onClick={onToggleCollapse}
+          title="Expandir Inspetor 3D & Engenharia"
+        >
+          <ChevronLeft size={16} />
+          <span className="rail-vertical-text">Inspetor 3D</span>
+          <Layers size={14} className="rail-icon" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="side-panel right-panel" aria-label="Inspetor de Modelo e Engenharia">
       <div className="panel-header">
@@ -118,19 +144,32 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
             <h2>Inspetor 3D &amp; Engenharia</h2>
             <p>
               {modelStats.activeFaces.toLocaleString('pt-BR')} faces •{' '}
-              {modelStats.activeVertices.toLocaleString('pt-BR')} vértices ativos
+              {modelStats.activeVertices.toLocaleString('pt-BR')} vértices
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          className="secondary-btn"
-          onClick={openRawModal}
-          title="Inspecionar código-fonte bruto dos arquivos (.dat, .lst, .dnm)"
-        >
-          <Code2 size={14} />
-          <span>Arquivos</span>
-        </button>
+        <div className="panel-header-actions">
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={openRawModal}
+            title="Inspecionar código-fonte bruto dos arquivos (.dat, .lst, .dnm)"
+          >
+            <Code2 size={13} />
+            <span>Arquivos</span>
+          </button>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              className="panel-toggle-btn"
+              onClick={onToggleCollapse}
+              title="Recolher painel do inspetor"
+              aria-label="Recolher painel do inspetor"
+            >
+              <ChevronRight size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="panel-scroll-body">
@@ -498,6 +537,19 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
             </summary>
 
             <div className="accordion-content">
+              {onOpenDatEditor && (
+                <div style={{ marginBottom: '10px' }}>
+                  <button
+                    type="button"
+                    className="secondary-btn full-width"
+                    onClick={onOpenDatEditor}
+                    title="Editar propriedades completas, aerodinâmica e física da aeronave"
+                  >
+                    <Sliders size={14} />
+                    <span>Editar Propriedades (.dat)</span>
+                  </button>
+                </div>
+              )}
               <table className="specs-table">
                 <tbody>
                   <tr>

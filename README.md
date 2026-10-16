@@ -100,6 +100,30 @@ O build produz pacotes minificados e otimizados na pasta `dist/`.
 
 ---
 
+## 🎛️ Editor Completo de Propriedades Aeronáuticas & Física (`.dat`)
+
+O AirViewer conta com um módulo completo de edição e engenharia de voo sem alterar a geometria ou modelagem 3D, permitindo editar todos os ~90 parâmetros do arquivo `.dat` do YSFlight através de uma interface moderna e responsiva dividida em 9 subsistemas:
+
+1. **Identidade & Radar**: Identificador HUD, Categoria de Missão (Fighter, Normal, Cargo, etc.), Classe Operacional, Pontos de Resistência Estrutural (STRENGTH) e Seção Reta Radar (RADARCRS m²).
+2. **Propulsão & Vetorização**:
+   - Motores a Reação: Empuxo militar (THRMILIT), Pós-combustor (THRAFTBN), Reversor de empuxo e consumo em seco/molhado (FUELMILI / FUELABRN).
+   - Hélice / Pistão / Turboélice: Potência no eixo (PROPELLR HP), Eficiência da hélice (PROPEFCY) e velocidade mínima de tração estática (PROPVMIN).
+   - Super-Manobrabilidade: Vetorização de empuxo (TRSTVCTR) e coeficientes de arfagem, guinada e rolamento pós-estol (PSTMPTCH, PSTMYAW_, PSTMROLL).
+3. **Massas, Combustível & Balanceamento**: Peso limpo/vazio (WEIGHCLN), capacidade máxima de combustível (WEIGFUEL), carga paga máxima (WEIGLOAD), abastecimento inicial de spawn (INITFUEL %) e carga útil pré-carregada (INITLOAD), com visualização gráfica da decomposição de massas e cálculo de MTOW.
+4. **Aerodinâmica, Polares & Estabilidade**: Área alar (WINGAREA), ângulos de ataque críticos de estol positivo e negativo (CRITAOAP, CRITAOAM), velocidade crítica, incrementos de sustentação e arrasto ($\Delta C_L$, $\Delta C_D$) para flaps, trem de pouso e spoilers, além de constantes de amortecimento e manobrabilidade dinâmica (CPITMANE, CPITSTAB, CROLLMAN, CYAWMANE, CYAWSTAB).
+5. **Pontos 3D & Trens de Pouso**: Coordenadas espaciais do piloto (COCKPITP), triângulo de contato com o solo (LEFTGEAR, RIGHGEAR, WHELGEAR) com botão de simetrização automática, gerador de fumaça acrobática (SMOKEGEN), vapores de ponta de asa (VAPORPO0) e raio de colisão (HTRADIUS), sincronizados em tempo real com os marcadores 3D da viewport.
+6. **Armamentos & Gatilhos**: Canhão (munição, dano, cadência, mira preditiva HUD), mísseis Ar-Ar (AAM), Ar-Solo (AGM), bombas convencionais, pods de foguetes, flares defensivos e atribuição de disparo dos 4 gatilhos (TRIGGERS).
+7. **Envelope Operacional & Referências**: Velocidade máxima (MAXSPEED), velocidades de manobra inicial e plena (MANESPD1, MANESPD2), perfis de cruzeiro (REFVCRUS, REFACRUS, REFTCRUS) e rampa de pouso (REFVLAND, REFAOALD, REFTHRLD, REFLNRWY).
+8. **Polares Aerodinâmicas & Curvas $C_L \times \alpha$**: Gráficos vetoriais interativos gerados a partir da curva de sustentação com pontos de estol e telemetria de carga alar ($W/S$), razão empuxo/peso ($T/W$) e potência/peso ($P/W$).
+9. **Comparador Diff & Exportação Bidirecional**:
+   - Visualizador de diferenças linha a linha (LCS Diff) destacando adições em verde, remoções em vermelho e linhas preservadas.
+   - **Aplicar no Voo**: Transfere instantaneamente as alterações para a cena 3D e simulação.
+   - **Baixar .DAT**: Exporta o arquivo formatado, documentado e pronto para uso no YSFlight oficial.
+   - **Copiar Texto**: Copia o manifesto para a área de transferência com um clique.
+   - **Validação Física Automática**: Alertas para inconsistências físicas (ex: empuxo negativo, desequilíbrio estrutural, inversão de ângulos críticos de estol).
+
+---
+
 ## 🛠️ Tecnologias Utilizadas
 
 - **React 18** com componentes HTML5 nativos (`<select>`, `<input type="range">`, `<details>`, `<summary>`, `<meter>`, `<dialog>`).
