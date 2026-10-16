@@ -142,6 +142,45 @@ body,
   letter-spacing: -0.01em;
 }
 
+/* Aircraft Selector in TopBar */
+.aircraft-picker-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.aircraft-select {
+  max-width: 340px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aircraft-select:hover,
+.aircraft-select:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+
+.aircraft-select optgroup {
+  background: #0f172a;
+  color: var(--accent-cyan);
+  font-weight: 700;
+}
+
+.aircraft-select option {
+  background: #090e17;
+  color: var(--text-primary);
+  font-weight: normal;
+}
+
 .aircraft-submeta {
   display: flex;
   align-items: center;
@@ -156,6 +195,36 @@ body,
   padding: 1px 6px;
   border-radius: 4px;
   border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+/* Source Pill for External SRF vs Embedded PCK */
+.source-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-left: 5px;
+}
+
+.source-pill.external {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.source-pill.pck {
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.category-badge {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
 }
 
 .topbar-cameras {

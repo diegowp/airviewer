@@ -230,7 +230,7 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
     const pointer = new THREE.Vector2();
     let pointerDownPos = { x: 0, y: 0 };
 
-    const getHitNodeName = (event: MouseEvent): string | null => {
+    const getHitNodeId = (event: MouseEvent): string | null => {
       if (!dnmRootGroupRef.current || !dnmRootGroupRef.current.visible) return null;
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -241,9 +241,9 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
       for (const hit of intersects) {
         let obj: THREE.Object3D | null = hit.object;
         while (obj) {
-          if (obj.userData && obj.userData.dnmNodeName) {
+          if (obj.userData && (obj.userData.dnmNodeUid || obj.userData.dnmNodeName)) {
             if (obj.visible) {
-              return obj.userData.dnmNodeName as string;
+              return (obj.userData.dnmNodeUid || obj.userData.dnmNodeName) as string;
             }
           }
           obj = obj.parent;
@@ -259,16 +259,16 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
     const handlePointerUp = (e: MouseEvent) => {
       const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
       if (dist < 5 && e.button === 0) {
-        const hitName = getHitNodeName(e);
-        onSelectNode(hitName === selectedNodeRef.current ? null : hitName);
+        const hitId = getHitNodeId(e);
+        onSelectNode(hitId === selectedNodeRef.current ? null : hitId);
       }
     };
 
     const handlePointerMove = (e: MouseEvent) => {
-      const hitName = getHitNodeName(e);
-      if (hitName !== hoveredNodeRef.current) {
-        setHoveredNodeName(hitName);
-        renderer.domElement.style.cursor = hitName ? 'pointer' : 'grab';
+      const hitId = getHitNodeId(e);
+      if (hitId !== hoveredNodeRef.current) {
+        setHoveredNodeName(hitId);
+        renderer.domElement.style.cursor = hitId ? 'pointer' : 'grab';
       }
     };
 
@@ -347,21 +347,31 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
 
       // Update each DNM node matrix and visibility
       const tempMat = new THREE.Matrix4();
-      nodeMapRef.current.forEach((runtimeObj, nodeName) => {
+      nodeMapRef.current.forEach((runtimeObj) => {
         const evalRes = evaluateDnmNodeTransform(
           runtimeObj.node,
           curControls,
           rotorAngle,
           tempMat
         );
-        const userHidden = hiddenNodesRef.current.has(nodeName);
+        const nodeUid = runtimeObj.node.uid;
+        const nodeName = runtimeObj.node.name;
+        const userHidden =
+          hiddenNodesRef.current.has(nodeUid) ||
+          hiddenNodesRef.current.has(nodeName);
+
         runtimeObj.group.visible = evalRes.visible && !userHidden;
         runtimeObj.group.matrix.copy(evalRes.matrix);
         runtimeObj.group.matrixWorldNeedsUpdate = true;
 
         // Highlight selected or hovered node
-        const isSelected = selectedNodeRef.current === nodeName;
-        const isHovered = hoveredNodeRef.current === nodeName;
+        const isSelected =
+          selectedNodeRef.current === nodeUid ||
+          selectedNodeRef.current === nodeName;
+        const isHovered =
+          hoveredNodeRef.current === nodeUid ||
+          hoveredNodeRef.current === nodeName;
+
         if (runtimeObj.opaqueMat) {
           runtimeObj.opaqueMat.wireframe = curSettings.wireframe;
           runtimeObj.opaqueMat.transparent = curSettings.xrayMode;
@@ -527,14 +537,18 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
 
     if (!dnmData) return;
 
-    // Create a Group for each SRF node
+    // 1. Create a Group for each SRF node keyed by uid
+    const nameToRuntimes = new Map<string, NodeRuntimeObjects[]>();
+
     for (const node of dnmData.nodes) {
       const group = new THREE.Group();
-      group.name = `SRF_${node.name}`;
+      group.name = `SRF_${node.name}_${node.uid}`;
       group.matrixAutoUpdate = false;
-      group.userData = { dnmNodeName: node.name };
+      group.userData = { dnmNodeUid: node.uid, dnmNodeName: node.name };
 
-      const pckMesh = dnmData.pckMeshes[node.fileName];
+      const pckMesh =
+        dnmData.pckMeshes[node.fileName] ||
+        dnmData.pckMeshes[node.fileName.toLowerCase()];
       const runtimeObj: NodeRuntimeObjects = { node, group };
 
       if (pckMesh) {
@@ -551,7 +565,7 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
           const meshObj = new THREE.Mesh(built.opaqueGeometry, opaqueMat);
           meshObj.castShadow = true;
           meshObj.receiveShadow = true;
-          meshObj.userData = { dnmNodeName: node.name };
+          meshObj.userData = { dnmNodeUid: node.uid, dnmNodeName: node.name };
           group.add(meshObj);
           runtimeObj.opaqueMesh = meshObj;
           runtimeObj.opaqueMat = opaqueMat;
@@ -570,34 +584,45 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
           });
           const transMeshObj = new THREE.Mesh(built.transparentGeometry, transMat);
           transMeshObj.renderOrder = 10;
-          transMeshObj.userData = { dnmNodeName: node.name };
+          transMeshObj.userData = { dnmNodeUid: node.uid, dnmNodeName: node.name };
           group.add(transMeshObj);
           runtimeObj.transparentMesh = transMeshObj;
           runtimeObj.transparentMat = transMat;
         }
       }
 
-      nodeMapRef.current.set(node.name, runtimeObj);
+      nodeMapRef.current.set(node.uid, runtimeObj);
+
+      const list = nameToRuntimes.get(node.name) || [];
+      list.push(runtimeObj);
+      nameToRuntimes.set(node.name, list);
     }
 
-    // Wire up parent-child relationships (CLD)
-    const childNamesSet = new Set<string>();
+    // 2. Wire up parent-child relationships (CLD)
+    const childUidsSet = new Set<string>();
     for (const node of dnmData.nodes) {
-      const parentRuntime = nodeMapRef.current.get(node.name);
+      const parentRuntime = nodeMapRef.current.get(node.uid);
       if (!parentRuntime) continue;
       for (const childName of node.childrenNames) {
-        const childRuntime = nodeMapRef.current.get(childName);
-        if (childRuntime && childRuntime !== parentRuntime) {
-          parentRuntime.group.add(childRuntime.group);
-          childNamesSet.add(childName);
+        const children = nameToRuntimes.get(childName);
+        if (children) {
+          for (const childRuntime of children) {
+            if (
+              childRuntime !== parentRuntime &&
+              !childUidsSet.has(childRuntime.node.uid)
+            ) {
+              parentRuntime.group.add(childRuntime.group);
+              childUidsSet.add(childRuntime.node.uid);
+            }
+          }
         }
       }
     }
 
-    // Attach root nodes to dnmRoot
+    // 3. Attach root nodes to dnmRoot
     for (const node of dnmData.nodes) {
-      if (!childNamesSet.has(node.name)) {
-        const rt = nodeMapRef.current.get(node.name);
+      if (!childUidsSet.has(node.uid)) {
+        const rt = nodeMapRef.current.get(node.uid);
         if (rt) {
           dnmRoot.add(rt.group);
         }
@@ -744,50 +769,59 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
     const orbit = orbitRef.current;
     if (!camera || !orbit) return;
 
+    const radius = Math.max(3.5, datData?.outsideRadiusM ?? 6.5);
+    const scale = radius / 6.5;
+
     switch (cameraPreset) {
       case 'cockpit': {
-        // Exact pilot eye position from t25universal.dat: COCKPITP -0.50m 0.90m 0.80m
+        // Pilot eye position from .dat
         const cp = datData?.points3D.cockpit ?? { x: -0.5, y: 0.9, z: 0.8 };
         const eye = ysVecToThree(cp);
         camera.position.set(eye.x, eye.y, eye.z);
-        // Look forward toward the nose (+Z in Three.js space) and slightly down over the instrument panel
         orbit.target.set(eye.x * 0.6, eye.y - 0.18, eye.z + 3.5);
         orbit.update();
         break;
       }
       case 'front': {
-        camera.position.set(0, 1.2, 14.5);
+        camera.position.set(0, 1.2 * scale, 14.5 * scale);
         orbit.target.set(0, 0, 0);
         orbit.update();
         break;
       }
       case 'side': {
-        camera.position.set(15.5, 1.0, -1.0);
+        camera.position.set(15.5 * scale, 1.0 * scale, -1.0 * scale);
         orbit.target.set(0, 0, -1.0);
         orbit.update();
         break;
       }
       case 'top': {
-        camera.position.set(0, 18.5, -1.2);
+        camera.position.set(0, 18.5 * scale, -1.2 * scale);
         orbit.target.set(0, 0, -1.0);
         orbit.update();
         break;
       }
       case 'tail': {
-        camera.position.set(0, 2.2, -16.0);
+        camera.position.set(0, 2.2 * scale, -16.0 * scale);
         orbit.target.set(0, 0, 0);
         orbit.update();
         break;
       }
       case 'hangar':
       default: {
-        camera.position.set(11.5, 4.2, 11.5);
+        camera.position.set(11.5 * scale, 4.2 * scale, 11.5 * scale);
         orbit.target.set(0, -0.2, -0.8);
         orbit.update();
         break;
       }
     }
   }, [cameraPreset, cameraResetTrigger, datData]);
+
+  const hoveredNode = dnmData?.nodes.find(
+    (n) => n.uid === hoveredNodeName || n.name === hoveredNodeName
+  );
+  const selectedNode = dnmData?.nodes.find(
+    (n) => n.uid === selectedNodeName || n.name === selectedNodeName
+  );
 
   return (
     <div className="viewport-wrapper" ref={mountRef}>
@@ -822,17 +856,15 @@ export const AircraftViewport: React.FC<AircraftViewportProps> = ({
         <span className="hud-divider">|</span>
         <span>
           <strong>Peça sob o cursor:</strong>{' '}
-          {hoveredNodeName
-            ? `SRF "${hoveredNodeName}" (${
-                dnmData?.nodes.find((n) => n.name === hoveredNodeName)?.fileName ?? ''
-              })`
+          {hoveredNode
+            ? `SRF "${hoveredNode.name}" (${hoveredNode.fileName || 'sem malha'})`
             : 'Nenhuma (clique em uma peça 3D para inspecionar)'}
         </span>
-        {selectedNodeName && (
+        {selectedNode && (
           <>
             <span className="hud-divider">|</span>
             <span className="hud-selected-tag">
-              Selecionado: SRF &quot;{selectedNodeName}&quot;
+              Selecionado: SRF &quot;{selectedNode.name}&quot; ({selectedNode.fileName})
               <button
                 type="button"
                 className="hud-clear-btn"

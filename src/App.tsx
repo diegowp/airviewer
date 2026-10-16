@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
+  AircraftCatalogEntry,
   AircraftDatData,
   CameraPreset,
   DnmModelData,
   FlightControlState,
   SrfMeshData,
 } from './types/ysflight';
+import { AIRCRAFT_CATALOG, resolveDiskSrfFilename } from './data/aircraftCatalog';
 import { parseDnmText } from './parsers/dnmParser';
 import { parseSrfText } from './parsers/srfParser';
 import { parseDatText } from './parsers/datParser';
@@ -26,6 +28,10 @@ const INITIAL_CONTROLS: FlightControlState = {
   vgw: 0,
   flap: 0,
   spoiler: 0,
+  afterburner: false,
+  bombBay: 0,
+  doorsAndLights: 0,
+  brakeChuteAndHook: 0,
   autoDemo: false,
 };
 
@@ -42,6 +48,7 @@ const INITIAL_RENDER_SETTINGS: RenderSettings = {
 };
 
 export const App: React.FC = () => {
+  const [selectedAircraftId, setSelectedAircraftId] = useState<string>('t-25-universal');
   const [dnmData, setDnmData] = useState<DnmModelData | null>(null);
   const [collData, setCollData] = useState<SrfMeshData | null>(null);
   const [datData, setDatData] = useState<AircraftDatData | null>(null);
@@ -68,84 +75,139 @@ export const App: React.FC = () => {
   const [selectedNodeName, setSelectedNodeName] = useState<string | null>(null);
   const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set());
 
-  // Carrega os arquivos originais da aeronave T-25 Universal na inicialização
-  useEffect(() => {
-    let cancelled = false;
-    async function loadDefaultModel() {
+  // Função central para carregar uma aeronave do catálogo com suporte a múltiplos SRFs externos
+  const loadCatalogAircraft = useCallback(async (entry: AircraftCatalogEntry) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // 1. Carrega o arquivo principal .dnm
+      const dnmRes = await fetch(`${entry.baseDir}/${entry.dnmFile}`);
+      if (!dnmRes.ok) {
+        throw new Error(`Falha ao carregar ${entry.dnmFile} (${dnmRes.status})`);
+      }
+      const dnmText = await dnmRes.text();
+
+      // 2. Carrega o arquivo .dat de especificações técnicas
+      let datText = '';
+      let parsedDat: AircraftDatData | null = null;
       try {
-        setLoading(true);
-        setError(null);
-
-        const [dnmRes, collRes, datRes, lstRes] = await Promise.all([
-          fetch('/models/t-25/t25universal.dnm'),
-          fetch('/models/t-25/t25universal_coll.srf'),
-          fetch('/models/t-25/t25universal.dat'),
-          fetch('/models/t-25/t25universal.lst'),
-        ]);
-
-        if (!dnmRes.ok) {
-          throw new Error(`Falha ao carregar t25universal.dnm (${dnmRes.status})`);
+        const datRes = await fetch(`${entry.baseDir}/${entry.datFile}`);
+        if (datRes.ok) {
+          datText = await datRes.text();
+          parsedDat = parseDatText(datText);
         }
-
-        const [dnmText, collText, datText, lstText] = await Promise.all([
-          dnmRes.text(),
-          collRes.ok ? collRes.text() : Promise.resolve(''),
-          datRes.ok ? datRes.text() : Promise.resolve(''),
-          lstRes.ok ? lstRes.text() : Promise.resolve(''),
-        ]);
-
-        if (cancelled) return;
-
-        const parsedDnm = parseDnmText(dnmText);
-        const parsedColl = collText
-          ? parseSrfText(collText, 't25universal_coll.srf')
-          : null;
-        const parsedDat = datText ? parseDatText(datText) : null;
-
-        // Extrai a seção final do .dnm onde os 25 nós SRF e canais CLA estão declarados
-        const dnmLines = dnmText.split(/\r?\n/);
-        const srfSectionStart = dnmLines.findIndex((l) => l.trim().startsWith('SRF '));
-        const dnmHeaderSample =
-          srfSectionStart >= 0
-            ? dnmLines.slice(srfSectionStart, srfSectionStart + 300).join('\n')
-            : dnmLines.slice(0, 200).join('\n');
-
-        setDnmData(parsedDnm);
-        setCollData(parsedColl);
-        setDatData(parsedDat);
-        setRawFiles({
-          lst: lstText,
-          dat: datText,
-          dnmHeader: dnmHeaderSample,
-        });
       } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : 'Erro desconhecido ao carregar modelo 3D'
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+        console.warn(`Aviso ao carregar .dat:`, err);
+      }
+
+      // 3. Carrega a malha de colisão (SRF) se existir
+      let parsedColl: SrfMeshData | null = null;
+      if (entry.collFile) {
+        try {
+          const collRes = await fetch(`${entry.baseDir}/${entry.collFile}`);
+          if (collRes.ok) {
+            const collText = await collRes.text();
+            parsedColl = parseSrfText(collText, entry.collFile);
+          }
+        } catch (err) {
+          console.warn(`Aviso ao carregar malha de colisão:`, err);
         }
       }
-    }
 
-    loadDefaultModel();
-    return () => {
-      cancelled = true;
-    };
+      // 4. Pré-parse do DNM para identificar todas as peças externas necessárias (.srf)
+      const preliminaryDnm = parseDnmText(dnmText);
+      const externalMeshes: Record<string, SrfMeshData> = {};
+
+      if (preliminaryDnm.externalSrfNames && preliminaryDnm.externalSrfNames.length > 0) {
+        await Promise.all(
+          preliminaryDnm.externalSrfNames.map(async (requestedSrf) => {
+            const diskFileName =
+              resolveDiskSrfFilename(entry, requestedSrf) || requestedSrf;
+            try {
+              const srfRes = await fetch(`${entry.baseDir}/${diskFileName}`);
+              if (srfRes.ok) {
+                const srfText = await srfRes.text();
+                const mesh = parseSrfText(srfText, diskFileName);
+                externalMeshes[requestedSrf] = mesh;
+                externalMeshes[requestedSrf.toLowerCase()] = mesh;
+                externalMeshes[diskFileName] = mesh;
+                externalMeshes[diskFileName.toLowerCase()] = mesh;
+              }
+            } catch (srfErr) {
+              console.warn(
+                `Não foi possível carregar a peça externa ${diskFileName}:`,
+                srfErr
+              );
+            }
+          })
+        );
+      }
+
+      // 5. Parse final do DNM integrando as malhas externas resolvidas
+      const finalDnm = parseDnmText(dnmText, externalMeshes);
+
+      // Amostra do cabeçalho de nós para o modal de inspeção bruta
+      const dnmLines = dnmText.split(/\r?\n/);
+      const srfSectionStart = dnmLines.findIndex(
+        (l) => l.trim().startsWith('SRF ') || l.trim().startsWith('SRFNAM ')
+      );
+      const dnmHeaderSample =
+        srfSectionStart >= 0
+          ? dnmLines.slice(srfSectionStart, srfSectionStart + 300).join('\n')
+          : dnmLines.slice(0, 200).join('\n');
+
+      setDnmData(finalDnm);
+      setCollData(parsedColl);
+      setDatData(parsedDat);
+      setRawFiles({
+        lst: '',
+        dat: datText,
+        dnmHeader: dnmHeaderSample,
+      });
+      setSelectedNodeName(null);
+      setHiddenNodes(new Set());
+      setRenderSettings((prev) => ({ ...prev, previewOrphanPck: null }));
+      setCameraResetTrigger((c) => c + 1);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Erro desconhecido ao carregar modelo da aeronave'
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const handleToggleNodeVisibility = useCallback((nodeName: string) => {
+  // Carrega a aeronave inicial (T-25 Universal)
+  useEffect(() => {
+    const defaultEntry =
+      AIRCRAFT_CATALOG.find((a) => a.id === selectedAircraftId) ||
+      AIRCRAFT_CATALOG[0];
+    if (defaultEntry) {
+      loadCatalogAircraft(defaultEntry);
+    }
+  }, []);
+
+  const handleSelectAircraft = useCallback(
+    (aircraftId: string) => {
+      setSelectedAircraftId(aircraftId);
+      const entry = AIRCRAFT_CATALOG.find((a) => a.id === aircraftId);
+      if (entry) {
+        loadCatalogAircraft(entry);
+      }
+    },
+    [loadCatalogAircraft]
+  );
+
+  const handleToggleNodeVisibility = useCallback((nodeUidOrName: string) => {
     setHiddenNodes((prev) => {
       const next = new Set(prev);
-      if (next.has(nodeName)) {
-        next.delete(nodeName);
+      if (next.has(nodeUidOrName)) {
+        next.delete(nodeUidOrName);
       } else {
-        next.add(nodeName);
+        next.add(nodeUidOrName);
       }
       return next;
     });
@@ -156,22 +218,21 @@ export const App: React.FC = () => {
   }, []);
 
   const handleIsolateNode = useCallback(
-    (nodeName: string) => {
+    (nodeUidOrName: string) => {
       if (!dnmData) return;
       setHiddenNodes((prev) => {
-        // Se já estava isolado apenas nele, mostra todos novamente
-        if (prev.size === dnmData.nodes.length - 1 && !prev.has(nodeName)) {
+        if (prev.size === dnmData.nodes.length - 1 && !prev.has(nodeUidOrName)) {
           return new Set();
         }
         const next = new Set<string>();
         for (const n of dnmData.nodes) {
-          if (n.name !== nodeName) {
-            next.add(n.name);
+          if (n.uid !== nodeUidOrName && n.name !== nodeUidOrName) {
+            next.add(n.uid);
           }
         }
         return next;
       });
-      setSelectedNodeName(nodeName);
+      setSelectedNodeName(nodeUidOrName);
     },
     [dnmData]
   );
@@ -185,70 +246,110 @@ export const App: React.FC = () => {
     setCameraResetTrigger((c) => c + 1);
   }, []);
 
+  // Suporte a carregamento de múltiplos arquivos customizados do usuário (DNM + múltiplos SRFs + DAT)
   const handleLoadCustomFiles = useCallback(async (files: FileList) => {
     try {
       setLoading(true);
       setError(null);
 
-      let newDnm: DnmModelData | null = null;
-      let newColl: SrfMeshData | null = null;
-      let newDat: AircraftDatData | null = null;
+      const fileArr = Array.from(files);
+      const srfMeshes: Record<string, SrfMeshData> = {};
+      let dnmFile: File | null = null;
+      let datFile: File | null = null;
+      let collMesh: SrfMeshData | null = null;
 
-      for (const file of Array.from(files)) {
-        const lower = file.name.toLowerCase();
-        const text = await file.text();
-
-        if (lower.endsWith('.dnm')) {
-          newDnm = parseDnmText(text);
-        } else if (lower.endsWith('.srf')) {
-          const mesh = parseSrfText(text, file.name);
-          if (!newDnm && files.length === 1) {
-            newDnm = {
-              version: 1,
-              pckMeshes: { [file.name]: mesh },
-              pckOrder: [file.name],
-              nodes: [
-                {
-                  name: 'ROOT_SRF',
-                  fileName: file.name,
-                  cla: 0,
-                  nst: 0,
-                  states: [],
-                  pos: {
-                    pos: { x: 0, y: 0, z: 0 },
-                    att: { h: 0, p: 0, b: 0 },
-                    visible: 1,
-                  },
-                  cnt: { x: 0, y: 0, z: 0 },
-                  rel: 'DEP',
-                  childrenNames: [],
-                },
-              ],
-              rootNodeNames: ['ROOT_SRF'],
-              unreferencedPcks: [],
-            };
-          } else {
-            newColl = mesh;
+      // 1. Processa todos os arquivos .srf primeiro
+      for (const f of fileArr) {
+        const lower = f.name.toLowerCase();
+        if (lower.endsWith('.srf')) {
+          const text = await f.text();
+          const mesh = parseSrfText(text, f.name);
+          srfMeshes[f.name] = mesh;
+          srfMeshes[lower] = mesh;
+          if (lower.includes('coll')) {
+            collMesh = mesh;
           }
+        } else if (lower.endsWith('.dnm')) {
+          dnmFile = f;
         } else if (lower.endsWith('.dat')) {
-          newDat = parseDatText(text);
+          datFile = f;
         }
+      }
+
+      let newDnm: DnmModelData | null = null;
+      let dnmHeaderText = '';
+
+      if (dnmFile) {
+        const dnmText = await dnmFile.text();
+        newDnm = parseDnmText(dnmText, srfMeshes);
+
+        const dnmLines = dnmText.split(/\r?\n/);
+        const srfSectionStart = dnmLines.findIndex(
+          (l) => l.trim().startsWith('SRF ') || l.trim().startsWith('SRFNAM ')
+        );
+        dnmHeaderText =
+          srfSectionStart >= 0
+            ? dnmLines.slice(srfSectionStart, srfSectionStart + 300).join('\n')
+            : dnmLines.slice(0, 200).join('\n');
+      } else if (Object.keys(srfMeshes).length === 1) {
+        // Arquivo SRF avulso sem DNM
+        const [srfName, mesh] = Object.entries(srfMeshes)[0];
+        newDnm = {
+          version: 1,
+          pckMeshes: { [srfName]: mesh, [srfName.toLowerCase()]: mesh },
+          pckOrder: [srfName],
+          externalSrfNames: [],
+          nodes: [
+            {
+              uid: 'node_0',
+              name: 'ROOT_SRF',
+              fileName: srfName,
+              meshSource: 'external',
+              cla: 0,
+              nst: 0,
+              states: [],
+              pos: {
+                pos: { x: 0, y: 0, z: 0 },
+                att: { h: 0, p: 0, b: 0 },
+                visible: 1,
+              },
+              cnt: { x: 0, y: 0, z: 0 },
+              rel: 'DEP',
+              childrenNames: [],
+            },
+          ],
+          rootNodeNames: ['ROOT_SRF'],
+          unreferencedPcks: [],
+        };
+      }
+
+      let newDat: AircraftDatData | null = null;
+      let datText = '';
+      if (datFile) {
+        datText = await datFile.text();
+        newDat = parseDatText(datText);
       }
 
       if (newDnm) {
         setDnmData(newDnm);
+        setSelectedAircraftId('custom');
         setSelectedNodeName(null);
         setHiddenNodes(new Set());
         setRenderSettings((prev) => ({ ...prev, previewOrphanPck: null }));
+        setRawFiles({
+          lst: '',
+          dat: datText,
+          dnmHeader: dnmHeaderText,
+        });
       }
-      if (newColl) setCollData(newColl);
+      if (collMesh) setCollData(collMesh);
       if (newDat) setDatData(newDat);
       setCameraResetTrigger((c) => c + 1);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'Erro ao processar arquivo customizado'
+          : 'Erro ao processar arquivos customizados'
       );
     } finally {
       setLoading(false);
@@ -260,7 +361,9 @@ export const App: React.FC = () => {
     let polys = 0;
     let verts = 0;
     for (const node of dnmData.nodes) {
-      const pck = dnmData.pckMeshes[node.fileName];
+      const pck =
+        dnmData.pckMeshes[node.fileName] ||
+        dnmData.pckMeshes[node.fileName.toLowerCase()];
       if (pck) {
         polys += pck.polygons.length;
         verts += pck.vertices.length;
@@ -276,6 +379,9 @@ export const App: React.FC = () => {
   return (
     <div className="app-shell">
       <TopBar
+        catalog={AIRCRAFT_CATALOG}
+        selectedAircraftId={selectedAircraftId}
+        onSelectAircraft={handleSelectAircraft}
         dat={datData}
         cameraPreset={cameraPreset}
         onSelectPreset={handleSelectPreset}

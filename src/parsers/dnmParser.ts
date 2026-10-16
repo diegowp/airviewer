@@ -22,12 +22,23 @@ function parseTransformArgs(parts: string[]): DnmStateTransform {
  * Parses a YSFlight .dnm (DynaModel) file including all embedded PCK .srf meshes
  * and the hierarchical SRF scene graph nodes + CLA animation states.
  */
-export function parseDnmText(text: string): DnmModelData {
+export function parseDnmText(
+  text: string,
+  externalMeshes?: Record<string, SrfMeshData>
+): DnmModelData {
   const lines = text.split(/\r?\n/);
   let version = 1;
   const pckMeshes: Record<string, SrfMeshData> = {};
   const pckOrder: string[] = [];
   const nodes: DnmNode[] = [];
+
+  // If pre-loaded external meshes were provided, seed them in pckMeshes (both exact and lowercase)
+  if (externalMeshes) {
+    for (const [k, v] of Object.entries(externalMeshes)) {
+      pckMeshes[k] = v;
+      pckMeshes[k.toLowerCase()] = v;
+    }
+  }
 
   let i = 0;
   while (i < lines.length) {
@@ -49,6 +60,7 @@ export function parseDnmText(text: string): DnmModelData {
       const slice = lines.slice(i + 1, i + 1 + lineCount);
       const meshData = parseSrfLines(slice, pckName);
       pckMeshes[pckName] = meshData;
+      pckMeshes[pckName.toLowerCase()] = meshData;
       if (!pckOrder.includes(pckName)) {
         pckOrder.push(pckName);
       }
@@ -57,10 +69,13 @@ export function parseDnmText(text: string): DnmModelData {
       // Extract node name inside quotes or second token
       const match = raw.match(/^(?:SRF|SRFNAM)\s+"?([^"]+)"?/i);
       const nodeName = match ? match[1].trim() : parts[1] || `node_${nodes.length}`;
+      const uid = `node_${nodes.length}`;
 
       const node: DnmNode = {
+        uid,
         name: nodeName,
         fileName: '',
+        meshSource: 'none',
         cla: 0,
         nst: 0,
         states: [],
@@ -73,6 +88,8 @@ export function parseDnmText(text: string): DnmModelData {
         rel: 'DEP',
         childrenNames: [],
       };
+
+      let hasLin = false;
 
       i++;
       while (i < lines.length) {
@@ -89,6 +106,8 @@ export function parseDnmText(text: string): DnmModelData {
           break;
         } else if (nCmd === 'FIL' && nParts.length >= 2) {
           node.fileName = nParts[1];
+        } else if (nCmd === 'LIN') {
+          hasLin = true;
         } else if (nCmd === 'CLA' && nParts.length >= 2) {
           node.cla = parseInt(nParts[1], 10) || 0;
         } else if (nCmd === 'NST' && nParts.length >= 2) {
@@ -114,6 +133,16 @@ export function parseDnmText(text: string): DnmModelData {
         i++;
       }
 
+      // Classify mesh source
+      if (node.fileName) {
+        const inPck = Boolean(pckMeshes[node.fileName] || pckMeshes[node.fileName.toLowerCase()]);
+        node.meshSource = inPck ? 'pck' : 'external';
+      } else if (hasLin) {
+        node.meshSource = 'lin';
+      } else {
+        node.meshSource = 'none';
+      }
+
       nodes.push(node);
     } else {
       i++;
@@ -130,13 +159,23 @@ export function parseDnmText(text: string): DnmModelData {
   const rootNodeNames = nodes.filter((n) => !childSet.has(n.name)).map((n) => n.name);
 
   // Determine unreferenced PCK blocks
-  const usedFiles = new Set(nodes.map((n) => n.fileName));
-  const unreferencedPcks = pckOrder.filter((p) => !usedFiles.has(p));
+  const usedFiles = new Set(nodes.map((n) => n.fileName.toLowerCase()));
+  const unreferencedPcks = pckOrder.filter((p) => !usedFiles.has(p.toLowerCase()));
+
+  // Collect external SRF filenames needed by nodes
+  const externalSrfSet = new Set<string>();
+  for (const n of nodes) {
+    if (n.fileName && !pckMeshes[n.fileName] && !pckMeshes[n.fileName.toLowerCase()]) {
+      externalSrfSet.add(n.fileName);
+    }
+  }
+  const externalSrfNames = Array.from(externalSrfSet);
 
   return {
     version,
     pckMeshes,
     pckOrder,
+    externalSrfNames,
     nodes,
     rootNodeNames,
     unreferencedPcks,

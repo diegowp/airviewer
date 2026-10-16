@@ -1,14 +1,18 @@
 import React, { useRef, useState } from 'react';
 import {
   Activity,
+  Anchor,
   Compass,
+  DoorOpen,
   Fan,
+  Flame,
   Gauge,
   Play,
   RotateCcw,
   ShieldCheck,
   Sliders,
   Square,
+  Wind,
 } from 'lucide-react';
 import { FlightControlState } from '../../types/ysflight';
 
@@ -139,55 +143,51 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
                 onPointerDown={handleStickPointerDown}
                 onPointerMove={handleStickPointerMove}
                 onPointerUp={handleStickPointerUp}
-                title="Arraste para mover Ailerons (X) e Profundor (Y) simultaneamente"
+                title="Clique e arraste o manche 2D para comandar Aileron e Profundor"
               >
-                <div className="stick-grid-h" />
-                <div className="stick-grid-v" />
+                <div className="stick-crosshair-h" />
+                <div className="stick-crosshair-v" />
                 <div
-                  className="stick-cursor"
+                  className="stick-handle"
                   style={{
-                    left: `${(controls.aileron * 0.5 + 0.5) * 100}%`,
-                    top: `${(-controls.elevator * 0.5 + 0.5) * 100}%`,
+                    left: `${((controls.aileron + 1) / 2) * 100}%`,
+                    top: `${((-controls.elevator + 1) / 2) * 100}%`,
                   }}
                 />
-                <span className="stick-label top">PICAR / CABRAR</span>
-                <span className="stick-label left">ROL. ESQ</span>
-                <span className="stick-label right">ROL. DIR</span>
               </div>
 
-              <div className="stick-readouts">
-                <div className="readout-box">
-                  <span className="readout-label">Aileron (CLA 7)</span>
+              <div className="stick-telemetry">
+                <div className="stick-axis-row">
+                  <span className="axis-label">Aileron (Rolamento):</span>
                   <strong className="mono">
-                    {Math.round(controls.aileron * 100)}%
+                    {(controls.aileron * 20).toFixed(1)}°
                   </strong>
-                  <small>±24.0° (SRF 8 / 9)</small>
                 </div>
-                <div className="readout-box">
-                  <span className="readout-label">Profundor (CLA 6)</span>
+                <div className="stick-axis-row">
+                  <span className="axis-label">Profundor (Arfagem):</span>
                   <strong className="mono">
-                    {Math.round(controls.elevator * 100)}%
+                    {(-controls.elevator * 20).toFixed(1)}°
                   </strong>
-                  <small>±24.0° (SRF 7)</small>
                 </div>
                 <button
                   type="button"
-                  className="secondary-btn full-width"
+                  className="secondary-btn center-btn"
                   onClick={centerSurfaces}
                 >
-                  <RotateCcw size={13} /> Centralizar Superfícies
+                  <RotateCcw size={13} />
+                  <span>Centrar Superfícies</span>
                 </button>
               </div>
             </div>
 
-            {/* Sliders Individuais Nativos */}
+            {/* Sliders manuais de ajuste fino */}
             <div className="control-field">
               <div className="field-header">
                 <label htmlFor="slider-aileron">
-                  Ailerons (Roll) <span className="cla-pill">CLA 7</span>
+                  Aileron / Rolamento <span className="cla-pill">CLA 7</span>
                 </label>
                 <output htmlFor="slider-aileron" className="mono">
-                  {(controls.aileron * 24).toFixed(1)}°
+                  {(controls.aileron * 20).toFixed(1)}°
                 </output>
               </div>
               <input
@@ -206,20 +206,19 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
                 }
               />
               <div className="range-ticks">
-                <span>Esq (-100%)</span>
+                <span>Esq (STA 2)</span>
                 <span>Neutro (STA 0)</span>
-                <span>Dir (+100%)</span>
+                <span>Dir (STA 1)</span>
               </div>
             </div>
 
             <div className="control-field">
               <div className="field-header">
                 <label htmlFor="slider-elevator">
-                  Profundor / Elevator (Pitch){' '}
-                  <span className="cla-pill">CLA 6</span>
+                  Profundor / Arfagem <span className="cla-pill">CLA 6</span>
                 </label>
                 <output htmlFor="slider-elevator" className="mono">
-                  {(controls.elevator * 24).toFixed(1)}°
+                  {(controls.elevator * 20).toFixed(1)}°
                 </output>
               </div>
               <input
@@ -278,11 +277,118 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
           </div>
         </details>
 
-        {/* 2. Trem de Pouso Retrátil e Portas */}
+        {/* 2. Dispositivos Hipersustentadores & Freios Aerodinâmicos */}
         <details className="native-accordion" open>
           <summary>
             <span className="summary-title">
-              <ShieldCheck size={15} /> Trem de Pouso Retrátil (CLA 0)
+              <Wind size={15} /> Flaps &amp; Freios Aerodinâmicos (CLA 4, 5)
+            </span>
+            <span className="summary-badge mono">
+              F: {Math.round(controls.flap * 100)}% | S: {Math.round(controls.spoiler * 100)}%
+            </span>
+          </summary>
+
+          <div className="accordion-content">
+            <div className="control-field">
+              <div className="field-header">
+                <label htmlFor="slider-flap">
+                  Flaps de Sustentação <span className="cla-pill">CLA 5</span>
+                </label>
+                <output htmlFor="slider-flap" className="mono">
+                  {Math.round(controls.flap * 100)}% ({(controls.flap * 40).toFixed(0)}°)
+                </output>
+              </div>
+              <input
+                id="slider-flap"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={controls.flap}
+                onChange={(e) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    autoDemo: false,
+                    flap: parseFloat(e.target.value),
+                  }))
+                }
+              />
+              <div className="range-ticks">
+                <span>Recolhido (0°)</span>
+                <span>Decolagem (20°)</span>
+                <span>Pouso Pleno (40°)</span>
+              </div>
+            </div>
+
+            <div className="control-field">
+              <div className="field-header">
+                <label htmlFor="slider-spoiler">
+                  Freio Aerodinâmico / Spoiler <span className="cla-pill">CLA 4</span>
+                </label>
+                <output htmlFor="slider-spoiler" className="mono">
+                  {Math.round(controls.spoiler * 100)}%
+                </output>
+              </div>
+              <input
+                id="slider-spoiler"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={controls.spoiler}
+                onChange={(e) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    autoDemo: false,
+                    spoiler: parseFloat(e.target.value),
+                  }))
+                }
+              />
+              <div className="range-ticks">
+                <span>Fechado (STA 0)</span>
+                <span>50%</span>
+                <span>Aberto (STA 1)</span>
+              </div>
+            </div>
+
+            <div className="control-field">
+              <div className="field-header">
+                <label htmlFor="slider-vgw">
+                  Asa de Geometria Variável (VGW) <span className="cla-pill">CLA 1</span>
+                </label>
+                <output htmlFor="slider-vgw" className="mono">
+                  {Math.round(controls.vgw * 100)}%
+                </output>
+              </div>
+              <input
+                id="slider-vgw"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={controls.vgw}
+                onChange={(e) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    autoDemo: false,
+                    vgw: parseFloat(e.target.value),
+                  }))
+                }
+              />
+              <div className="range-ticks">
+                <span>Envergadura Plena</span>
+                <span>Enflechamento Médio</span>
+                <span>Enflechamento Máximo</span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        {/* 3. Trem de Pouso Retrátil e Portas */}
+        <details className="native-accordion" open>
+          <summary>
+            <span className="summary-title">
+              <ShieldCheck size={15} /> Trem de Pouso Retrátil (CLA 0, 14, 15)
             </span>
             <span className={`gear-pill ${gearStatusClass}`}>
               {Math.round(controls.gear * 100)}%
@@ -290,21 +396,20 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
           </summary>
 
           <div className="accordion-content">
-            {/* 3 Green Landing Gear Lights Indicator */}
             <div className="gear-lights-panel">
               <div className="gear-lights-cluster">
                 <div className={`gear-lamp ${gearStatusClass}`}>
                   <span className="lamp-bulb" />
-                  <small>NARIZ (SRF 10)</small>
+                  <small>NARIZ</small>
                 </div>
                 <div className="gear-lamps-main">
                   <div className={`gear-lamp ${gearStatusClass}`}>
                     <span className="lamp-bulb" />
-                    <small>ESQ (SRF 18/21)</small>
+                    <small>ESQ</small>
                   </div>
                   <div className={`gear-lamp ${gearStatusClass}`}>
                     <span className="lamp-bulb" />
-                    <small>DIR (SRF 19/20)</small>
+                    <small>DIR</small>
                   </div>
                 </div>
               </div>
@@ -354,25 +459,27 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
                 }}
               />
               <div className="range-ticks">
-                <span>0% Recolhido (STA 0)</span>
-                <span>Portas Visíveis &gt; 20%</span>
-                <span>100% Baixado (STA 1)</span>
+                <span>0% Recolhido</span>
+                <span>Portas CLA 14 (0.2..0.8)</span>
+                <span>100% Baixado</span>
               </div>
             </div>
           </div>
         </details>
 
-        {/* 3. Motor e Conjunto da Hélice */}
+        {/* 4. Motor, Hélice e Pós-Combustor */}
         <details className="native-accordion" open>
           <summary>
             <span className="summary-title">
-              <Fan size={15} /> Propulsão e Hélice (750 hp)
+              <Fan size={15} /> Propulsão &amp; Pós-Combustor (CLA 2, 3, 18, 20)
             </span>
-            <span className="summary-badge mono">{estimatedRpm} RPM</span>
+            <span className="summary-badge mono">
+              {controls.afterburner ? 'AFTERBURNER ATIVO' : `${estimatedRpm} RPM`}
+            </span>
           </summary>
 
           <div className="accordion-content">
-            <div className="engine-Switch-row">
+            <div className="engine-switch-row">
               <label className="native-switch-label" htmlFor="chk-engine">
                 <input
                   id="chk-engine"
@@ -421,10 +528,38 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
                 }
               />
               <div className="range-ticks">
-                <span>Marcha Lenta (CLA 18)</span>
+                <span>Lenta (CLA 18)</span>
                 <span>Transição (30–60%)</span>
-                <span>Plena Potência (CLA 20)</span>
+                <span>Plena (CLA 20)</span>
               </div>
+            </div>
+
+            {/* Pós-Combustor Switch */}
+            <div className="engine-switch-row" style={{ marginTop: '0.5rem' }}>
+              <label className="native-switch-label" htmlFor="chk-ab">
+                <input
+                  id="chk-ab"
+                  type="checkbox"
+                  checked={Boolean(controls.afterburner)}
+                  disabled={!controls.engineRunning}
+                  onChange={(e) =>
+                    onChange((prev) => ({
+                      ...prev,
+                      afterburner: e.target.checked,
+                    }))
+                  }
+                />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Flame size={14} color="#f97316" /> Pós-Combustão / Reheat <span className="cla-pill">CLA 2</span>
+                </span>
+              </label>
+              <span
+                className={`engine-badge ${
+                  controls.afterburner && controls.engineRunning ? 'running' : 'off'
+                }`}
+              >
+                {controls.afterburner && controls.engineRunning ? 'CHAMA ATIVA' : 'STANDBY'}
+              </span>
             </div>
 
             <div className="meter-group">
@@ -455,6 +590,110 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
           </div>
         </details>
 
+        {/* 5. Cargas, Portas e Sistemas Especiais */}
+        <details className="native-accordion">
+          <summary>
+            <span className="summary-title">
+              <DoorOpen size={15} /> Sistemas Especiais &amp; Portas (CLA 9, 10, 11, 16)
+            </span>
+            <span className="summary-badge">Armas/Portas</span>
+          </summary>
+
+          <div className="accordion-content">
+            <div className="control-field">
+              <div className="field-header">
+                <label htmlFor="slider-bomb">
+                  Baia de Armamento / Rampa de Carga <span className="cla-pill">CLA 9</span>
+                </label>
+                <output htmlFor="slider-bomb" className="mono">
+                  {Math.round((controls.bombBay ?? 0) * 100)}%
+                </output>
+              </div>
+              <input
+                id="slider-bomb"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={controls.bombBay ?? 0}
+                onChange={(e) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    autoDemo: false,
+                    bombBay: parseFloat(e.target.value),
+                  }))
+                }
+              />
+              <div className="range-ticks">
+                <span>Fechado (STA 0)</span>
+                <span>50% Aberto</span>
+                <span>Aberto Pleno (STA 1)</span>
+              </div>
+            </div>
+
+            <div className="control-field">
+              <div className="field-header">
+                <label htmlFor="slider-doors">
+                  Portas Deslizantes / Faróis / Vetor <span className="cla-pill">CLA 10</span>
+                </label>
+                <output htmlFor="slider-doors" className="mono">
+                  {Math.round((controls.doorsAndLights ?? 0) * 100)}%
+                </output>
+              </div>
+              <input
+                id="slider-doors"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={controls.doorsAndLights ?? 0}
+                onChange={(e) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    autoDemo: false,
+                    doorsAndLights: parseFloat(e.target.value),
+                  }))
+                }
+              />
+              <div className="range-ticks">
+                <span>Recolhido (STA 0)</span>
+                <span>Extensão Média</span>
+                <span>Extensão Máxima (STA 1)</span>
+              </div>
+            </div>
+
+            <div className="control-field">
+              <div className="field-header">
+                <label htmlFor="slider-chute">
+                  Gancho de Parada &amp; Paraquedas <span className="cla-pill">CLA 11 / 16</span>
+                </label>
+                <output htmlFor="slider-chute" className="mono">
+                  {Math.round((controls.brakeChuteAndHook ?? 0) * 100)}%
+                </output>
+              </div>
+              <input
+                id="slider-chute"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={controls.brakeChuteAndHook ?? 0}
+                onChange={(e) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    autoDemo: false,
+                    brakeChuteAndHook: parseFloat(e.target.value),
+                  }))
+                }
+              />
+              <div className="range-ticks">
+                <span>Recolhido (STA 0)</span>
+                <span>Acionado (STA 1)</span>
+              </div>
+            </div>
+          </div>
+        </details>
+
         {/* Resumo do Comportamento cinemático YSFlight */}
         <div className="info-card">
           <div className="info-card-title">
@@ -463,7 +702,7 @@ export const FlightControlsPanel: React.FC<FlightControlsPanelProps> = ({
           <p>
             Matrizes calculadas via <code>RotateXZ(h) · RotateZY(p) · RotateXY(b)</code>{' '}
             em unidades angulares de 16 bits (<code>65536 = 360°</code>), respeitando a
-            hierarquia pai-filho (<code>SRF &quot;25&quot; → CLD &quot;2&quot;, &quot;3&quot;</code>).
+            hierarquia pai-filho e resolução dinâmica de malhas externas (<code>.srf</code>).
           </p>
         </div>
       </div>

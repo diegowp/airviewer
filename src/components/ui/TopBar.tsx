@@ -10,9 +10,12 @@ import {
   ArrowUp,
   ArrowRight,
 } from 'lucide-react';
-import { AircraftDatData, CameraPreset } from '../../types/ysflight';
+import { AircraftCatalogEntry, AircraftDatData, CameraPreset } from '../../types/ysflight';
 
 interface TopBarProps {
+  catalog: AircraftCatalogEntry[];
+  selectedAircraftId: string;
+  onSelectAircraft: (id: string) => void;
   dat: AircraftDatData | null;
   cameraPreset: CameraPreset;
   onSelectPreset: (preset: CameraPreset) => void;
@@ -33,6 +36,9 @@ const CAMERA_PRESETS: Array<{ id: CameraPreset; label: string; icon: React.React
 ];
 
 export const TopBar: React.FC<TopBarProps> = ({
+  catalog,
+  selectedAircraftId,
+  onSelectAircraft,
   dat,
   cameraPreset,
   onSelectPreset,
@@ -43,6 +49,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   activeNodeCount,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const categories = Array.from(new Set(catalog.map((a) => a.category)));
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -61,13 +69,37 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="brand-name-row">
             <span className="brand-app">AIRVIEWER</span>
             <span className="brand-divider">/</span>
-            <h1 className="aircraft-title">{dat?.identify || 'T-25 Universal AFA'}</h1>
+            <div className="aircraft-picker-wrap">
+              <select
+                id="aircraft-picker"
+                className="native-select aircraft-select"
+                value={selectedAircraftId}
+                onChange={(e) => onSelectAircraft(e.target.value)}
+                aria-label="Selecionar Aeronave da Frota YSFAB"
+              >
+                {categories.map((cat) => (
+                  <optgroup key={cat} label={`── ${cat} ──`}>
+                    {catalog
+                      .filter((a) => a.category === cat)
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} • {a.force}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+                {selectedAircraftId === 'custom' && (
+                  <option value="custom">Arquivo Personalizado (Importado)</option>
+                )}
+              </select>
+            </div>
           </div>
           <div className="aircraft-submeta">
-            <span className="meta-pill">YSFlight DNM v2</span>
-            <span className="meta-pill">{activeNodeCount} nós ativos</span>
-            <span className="meta-pill">{totalPolygons.toLocaleString('pt-BR')} polígonos</span>
+            <span className="meta-pill">YSFlight DNM</span>
+            <span className="meta-pill">{activeNodeCount} nós</span>
+            <span className="meta-pill">{totalPolygons.toLocaleString('pt-BR')} faces</span>
             <span className="meta-pill">{totalVertices.toLocaleString('pt-BR')} vértices</span>
+            {dat?.category && <span className="meta-pill category-badge">{dat.category}</span>}
           </div>
         </div>
       </div>

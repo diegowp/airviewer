@@ -63,7 +63,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
     let activeVertices = 0;
     let activeFaces = 0;
     for (const n of dnmData.nodes) {
-      const m = dnmData.pckMeshes[n.fileName];
+      const m = dnmData.pckMeshes[n.fileName] || dnmData.pckMeshes[n.fileName.toLowerCase()];
       if (m) {
         activeVertices += m.vertices.length;
         activeFaces += m.polygons.length;
@@ -93,12 +93,12 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
   const selectedNode: DnmNode | undefined = useMemo(() => {
     if (!dnmData || !selectedNodeName) return undefined;
-    return dnmData.nodes.find((n) => n.name === selectedNodeName);
+    return dnmData.nodes.find((n) => n.uid === selectedNodeName || n.name === selectedNodeName);
   }, [dnmData, selectedNodeName]);
 
   const selectedMesh: SrfMeshData | undefined = useMemo(() => {
     if (!dnmData || !selectedNode) return undefined;
-    return dnmData.pckMeshes[selectedNode.fileName];
+    return dnmData.pckMeshes[selectedNode.fileName] || dnmData.pckMeshes[selectedNode.fileName.toLowerCase()];
   }, [dnmData, selectedNode]);
 
   const openRawModal = () => {
@@ -345,11 +345,11 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 aria-label="Filtrar categoria de peças"
               >
-                <option value="all">Todas as Categorias ({dnmData?.nodes.length ?? 0})</option>
-                <option value="control">Superfícies de Comando (CLA 6, 7, 8)</option>
-                <option value="gear">Trem de Pouso &amp; Portas (CLA 0 / NST 2)</option>
-                <option value="prop">Conjunto da Hélice (CLA 3, 18, 20)</option>
-                <option value="static">Estrutura &amp; Pintura (Estáticos)</option>
+                <option value="all">Todas as Peças ({dnmData?.nodes.length ?? 0})</option>
+                <option value="control">Superfícies &amp; Comandos (CLA 1, 4..8, 9..11, 16, 31)</option>
+                <option value="gear">Trem de Pouso &amp; Portas (CLA 0, 14, 15, 17)</option>
+                <option value="prop">Propulsão &amp; Pós-Combustor (CLA 2, 3, 18, 20)</option>
+                <option value="static">Estrutura &amp; Fuselagem (Estáticos)</option>
               </select>
 
               {hiddenNodes.size > 0 && (
@@ -376,19 +376,22 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
             <div className="srf-node-list">
               {filteredNodes.map((node) => {
-                const isHidden = hiddenNodes.has(node.name);
-                const isSelected = selectedNodeName === node.name;
+                const isHidden = hiddenNodes.has(node.uid) || hiddenNodes.has(node.name);
+                const isSelected =
+                  selectedNodeName === node.uid || selectedNodeName === node.name;
                 const info = getClaChannelInfo(node.cla, node.nst);
-                const mesh = dnmData?.pckMeshes[node.fileName];
+                const mesh =
+                  dnmData?.pckMeshes[node.fileName] ||
+                  dnmData?.pckMeshes[node.fileName.toLowerCase()];
 
                 return (
                   <div
-                    key={node.name}
+                    key={node.uid}
                     className={`srf-node-row ${isSelected ? 'selected' : ''} ${
                       isHidden ? 'hidden-node' : ''
                     }`}
                     onClick={() =>
-                      onSelectNode(isSelected ? null : node.name)
+                      onSelectNode(isSelected ? null : node.uid)
                     }
                   >
                     <div className="srf-node-main">
@@ -396,7 +399,13 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                       <div>
                         <div className="srf-node-title">
                           <strong>SRF &quot;{node.name}&quot;</strong>
-                          <code className="mono">{node.fileName}</code>
+                          {node.fileName && <code className="mono">{node.fileName}</code>}
+                          {node.meshSource === 'external' && (
+                            <span className="source-pill external">SRF Ext</span>
+                          )}
+                          {node.meshSource === 'pck' && (
+                            <span className="source-pill pck">PCK</span>
+                          )}
                         </div>
                         <small className="srf-node-sub">
                           {info.label} • {mesh?.polygons.length ?? 0} faces
@@ -415,7 +424,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                         type="button"
                         className="icon-btn"
                         title="Isolar apenas esta peça (Solo)"
-                        onClick={() => onIsolateNode(node.name)}
+                        onClick={() => onIsolateNode(node.uid)}
                       >
                         Solo
                       </button>
@@ -423,7 +432,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                         type="button"
                         className="icon-btn"
                         title={isHidden ? 'Mostrar peça' : 'Ocultar peça'}
-                        onClick={() => onToggleNodeVisibility(node.name)}
+                        onClick={() => onToggleNodeVisibility(node.uid)}
                       >
                         {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>

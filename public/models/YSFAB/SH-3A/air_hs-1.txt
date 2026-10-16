@@ -1,0 +1,1 @@
+aircraft/hss2/hss2.dat aircraft/hss2/hss2.dnm aircraft/hss2/hss2coll.srf aircraft/hss2/hss2cock.srf aircraft/hss2/hss2cors.dnm

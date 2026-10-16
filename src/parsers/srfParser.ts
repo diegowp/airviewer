@@ -81,11 +81,11 @@ export function parseSrfLines(lines: string[], name = 'mesh.srf'): SrfMeshData {
             parseInt(parts[3], 10) || 0,
           ];
         } else if (parts.length === 2) {
-          // 15-bit color fallback if any old SRF uses single integer color
+          // Exact 15-bit RGB conversion matching YsColor::Set15BitRGB
           const c15 = parseInt(parts[1], 10) || 0;
-          const g = ((c15 >> 10) & 31) * 8;
-          const r = ((c15 >> 5) & 31) * 8;
-          const b = (c15 & 31) * 8;
+          const g = Math.round((((c15 >> 10) & 31) * 255) / 31);
+          const r = Math.round((((c15 >> 5) & 31) * 255) / 31);
+          const b = Math.round(((c15 & 31) * 255) / 31);
           currentColor = [r, g, b];
         }
       } else if (cmd === 'N' || cmd === 'NOR') {

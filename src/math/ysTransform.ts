@@ -280,10 +280,28 @@ export function evaluateDnmNodeTransform(
       break;
     }
     case 1: {
-      // Variable geometry wing
-      if (node.states.length >= 2) {
+      // Variable geometry wing OR Propeller blade/blur visibility toggle (e.g. EMB-111)
+      const isPropellerPart =
+        node.fileName.toLowerCase().includes('prop') ||
+        node.fileName.toLowerCase().includes('blade') ||
+        (node.states.length >= 2 && node.states[0].visible !== node.states[1].visible);
+
+      if (isPropellerPart && node.states.length >= 2) {
+        // High-speed / running: state 0; stopped / low: state 1
+        const isFast = controls.engineRunning && controls.throttle > 0.3;
+        stateEval = interpolateNodeStates(node, isFast ? 0 : 1, isFast ? 0 : 1, 0);
+      } else if (node.states.length >= 2) {
         stateEval = interpolateNodeStates(node, 0, 1, controls.vgw);
       }
+      break;
+    }
+    case 2: {
+      // Afterburner flame (Reheat)
+      const abOn = controls.engineRunning && (controls.afterburner || controls.throttle > 0.95);
+      if (node.states.length >= 2) {
+        stateEval = interpolateNodeStates(node, 0, 1, abOn ? 1 : 0);
+      }
+      stateEval.show = abOn;
       break;
     }
     case 3: {
@@ -331,6 +349,69 @@ export function evaluateDnmNodeTransform(
         stateEval = interpolateNodeStates(node, 0, 1, controls.rudder);
       } else {
         stateEval = interpolateNodeStates(node, 0, 2, -controls.rudder);
+      }
+      break;
+    }
+    case 9: {
+      // Bomb Bay Doors / Cabin Doors / Cargo Ramp
+      if (node.states.length >= 2) {
+        stateEval = interpolateNodeStates(node, 0, 1, controls.bombBay);
+      }
+      break;
+    }
+    case 10: {
+      // Sliding Doors / Landing Lights / Thrust Vectoring (Helicopters S-70, UH-1H, Super Lynx)
+      if (node.states.length >= 2) {
+        stateEval = interpolateNodeStates(node, 0, 1, controls.doorsAndLights);
+      }
+      break;
+    }
+    case 11: {
+      // Drag Chute / Brake Chute (Mirage, F-5)
+      if (node.states.length >= 2) {
+        stateEval = interpolateNodeStates(node, 0, 1, controls.brakeChuteAndHook);
+      }
+      if (controls.brakeChuteAndHook < 0.1 && node.states.length >= 2 && node.states[0].visible === 0) {
+        stateEval.show = false;
+      }
+      break;
+    }
+    case 14: {
+      // Inner Landing Gear Doors (temporary open: 0..0.2 opens, 0.2..0.8 open, 0.8..1.0 closes)
+      if (node.states.length >= 2) {
+        const g = controls.gear;
+        let doorParam = 0;
+        if (g < 0.2) {
+          doorParam = g / 0.2;
+        } else if (g < 0.8) {
+          doorParam = 1.0;
+        } else {
+          doorParam = (1.0 - g) / 0.2;
+        }
+        stateEval = interpolateNodeStates(node, 0, 1, doorParam);
+      }
+      break;
+    }
+    case 15: {
+      // Gear Room / Secondary Bay (e.g., ERJ-145, R-99)
+      if (node.states.length >= 2) {
+        const bayParam = Math.max(0, Math.min(1, controls.gear / 0.6));
+        stateEval = interpolateNodeStates(node, 0, 1, bayParam);
+      }
+      break;
+    }
+    case 16: {
+      // Tailhook (Arresting hook for carrier landings, e.g. AF-1 Falcão)
+      if (node.states.length >= 2) {
+        stateEval = interpolateNodeStates(node, 0, 1, controls.brakeChuteAndHook);
+      }
+      break;
+    }
+    case 17: {
+      // Fast Outer Gear Doors (opens 0..0.2, stays open)
+      if (node.states.length >= 2) {
+        const fastParam = Math.max(0, Math.min(1, controls.gear / 0.2));
+        stateEval = interpolateNodeStates(node, 0, 1, fastParam);
       }
       break;
     }
@@ -525,34 +606,53 @@ export function buildSrfGeometries(
 /**
  * Human-readable metadata for YSFlight CLA animation channel IDs
  */
-export function getClaChannelInfo(cla: number, nst: number): { label: string; category: 'static' | 'control' | 'gear' | 'prop' } {
+export function getClaChannelInfo(
+  cla: number,
+  nst: number
+): { label: string; category: 'static' | 'control' | 'gear' | 'prop' } {
   if (cla === 0) {
     if (nst >= 2) {
-      return { label: 'CLA 0 • Trem de Pouso / Porta Retrátil', category: 'gear' };
+      return { label: 'CLA 0 • Trem de Pouso Principal', category: 'gear' };
     }
     return { label: 'CLA 0 • Estrutura Estática / Fuselagem', category: 'static' };
   }
   switch (cla) {
     case 1:
-      return { label: 'CLA 1 • Asa de Geometria Variável (VGW)', category: 'control' };
+      return { label: 'CLA 1 • Asa de Geom. Variável / Hélice', category: 'control' };
     case 2:
       return { label: 'CLA 2 • Pós-Combustor (Afterburner)', category: 'prop' };
     case 3:
-      return { label: 'CLA 3 • Eixo Rotativo da Hélice (Spinner)', category: 'prop' };
+      return { label: 'CLA 3 • Eixo Rotativo da Hélice / Rotor', category: 'prop' };
     case 4:
       return { label: 'CLA 4 • Spoiler / Freio Aerodinâmico', category: 'control' };
     case 5:
-      return { label: 'CLA 5 • Flaps', category: 'control' };
+      return { label: 'CLA 5 • Flaps de Sustentação', category: 'control' };
     case 6:
-      return { label: 'CLA 6 • Profundor (Elevator - Pitch)', category: 'control' };
+      return { label: 'CLA 6 • Profundor (Elevator - Arfagem)', category: 'control' };
     case 7:
-      return { label: 'CLA 7 • Aileron (Roll)', category: 'control' };
+      return { label: 'CLA 7 • Aileron (Rolamento)', category: 'control' };
     case 8:
-      return { label: 'CLA 8 • Leme (Rudder - Yaw)', category: 'control' };
+      return { label: 'CLA 8 • Leme de Direção (Rudder - Guinada)', category: 'control' };
+    case 9:
+      return { label: 'CLA 9 • Baia de Bombas / Portas de Carga', category: 'control' };
+    case 10:
+      return { label: 'CLA 10 • Portas Deslizantes / Faróis / Vetor', category: 'control' };
+    case 11:
+      return { label: 'CLA 11 • Paraquedas de Frenagem (Drag Chute)', category: 'control' };
+    case 14:
+      return { label: 'CLA 14 • Portas Internas do Trem (Ciclo 0..1)', category: 'gear' };
+    case 15:
+      return { label: 'CLA 15 • Compartimento do Trem (Gear Bay)', category: 'gear' };
+    case 16:
+      return { label: 'CLA 16 • Gancho de Parada (Tailhook Naval)', category: 'control' };
+    case 17:
+      return { label: 'CLA 17 • Portas Rápidas do Trem (0..0.2)', category: 'gear' };
     case 18:
       return { label: 'CLA 18 • Hélice Baixa Rotação (Pás Sólidas)', category: 'prop' };
     case 20:
       return { label: 'CLA 20 • Hélice Alta Rotação (Disco Blur)', category: 'prop' };
+    case 31:
+      return { label: 'CLA 31 • Bequilha Direcional (Steering)', category: 'control' };
     default:
       return { label: `CLA ${cla} • Canal Dinâmico`, category: 'control' };
   }
